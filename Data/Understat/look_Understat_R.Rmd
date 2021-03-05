@@ -1,0 +1,67 @@
+---
+title: "Understat Data"
+output: html_notebook
+---
+
+# Abstract
+
+
+# Connection
+
+First, we stablish a connection with the wrapper to Understat
+
+
+
+```{r settings, warning=FALSE}
+# set connection
+library(understatr)
+library(tidyverse)
+```
+
+## Visualize Match Stats by Season
+
+
+```{r}
+# retrive data
+df_season_stats.2019 <- get_league_teams_stats('EPL', 2019)
+
+# look 
+df_season_stats.2019 %>% head()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
