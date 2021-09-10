@@ -1,0 +1,50 @@
+---- notas EDA -----------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+
+
+---- Football Data UK ----
+La mitad de llos equipos de la actual PL han estado las 8 temporadas de forma continua.
+
+El factor de casa es un diferenciador en los momios. Por lo general son más bajos los momios en los underdogs en casa que cuando van de visita.
+
+Los momios para los equipos locales como visitantes se han mantenido visualmente igual cada temporada. Para considerar a un equipo claro favorito, es que tenga al menos el 75% de proba de ganar, que se traduce en un momio decimal del 1.333.
+
+
+---- SoFIFA ----
+
+1. Por lo general son 20 obs por semana en el SoFIFA
+  Existen algunos de 40 y otros de 60 obs por cambios esa semana en las variables
+  
+2. Hay empalmes de fechas entre FIFA's
+  La idea es dejar el fifa mas reciente (mayor update en la información)
+  
+
+---- general ----
+Colores de los equipos
+
+Arsenal: #EF0107 o #9c824a
+Chelsea: #034694
+Liverpool: #d00027 o #00a398
+City: #97c1e7
+ManU: #da020e
+Tottenham: #132257
+
+
+---- final dbb ----
+1. By the matter of variance in information, the first matchweek of the season should be discarded to predict.
+
+2. Maybe, change the matchweek to intervals of begging, middle and last part of the season. From numeric to categoric.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

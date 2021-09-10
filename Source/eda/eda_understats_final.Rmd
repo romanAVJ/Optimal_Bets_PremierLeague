@@ -1,0 +1,393 @@
+---
+title: "EDA Understats"
+output: html_notebook
+  html_document:
+    df_print: paged
+---
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+library(tidyr)
+
+# knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_knit$set(root.dir = '') 
+getwd()
+```
+
+# Read data
+
+Read files made in `source\wrangling\`
+
+```{r read_data, warning=FALSE}
+# folder
+folder_files <- "Data/Understat/final_dbb/"
+
+# read tables
+df_r <- read_csv(file = paste0(folder_files, "understats_raw.csv"))
+df_means <- read_csv(file = paste0(folder_files, "means_xi.csv"))
+df_final <- read_csv(file = paste0(folder_files, "understat_finaldbb.csv"))
+
+# final values
+# colors
+COLS_BIGSIX <- c("#9c824a", "#034694", "#00a398", "#97c1e7", "#da020e", "#132257")
+
+```
+
+
+# General stats
+
+## Base rates
+
+EPL final season table
+```{r tbl_epl_seasons}
+# table 
+df_r %>%
+  group_by(year, team_name) %>%
+  transmute(
+    # select important vars
+    year, matchweek, team_name, 
+
+    # select important vars to compute aggregates
+    scored, missed, pts,
+    
+    # running statistics by season 
+    total_pts = cumsum(pts),
+    diff_goals = cumsum(scored - missed),
+    total_goals = cumsum(scored)
+    
+  ) %>% 
+  ungroup() %>% 
+  arrange(
+    # premier league orders by: points, goal difference, total goals
+    year, matchweek, desc(total_pts), desc(diff_goals), desc(total_goals)
+  ) %>% 
+  group_by(year, matchweek) %>% 
+  mutate(
+    position_table = dense_rank(
+        desc(interaction(total_pts, diff_goals, total_goals, lex.order = TRUE))
+      )
+  ) %>% 
+  filter(
+    matchweek == 38
+  ) 
+
+
+```
+
+Win-draw-loss per seasons by local and away team and general
+```{r}
+df_r %>% 
+  group_by(year, h_a) %>% 
+  summarise(
+    home = mean(wins),
+    draw = mean(draws),
+    away = mean(loses)
+  ) %>% 
+  filter(h_a == "h") %>% 
+  select(-h_a) 
+
+# latex code of last table
+# df_r %>% 
+#   group_by(year, h_a) %>% 
+#   summarise(
+#     home = mean(wins),
+#     draw = mean(draws),
+#     away = mean(loses)
+#   ) %>% 
+#   filter(h_a == "h") %>% 
+#   select(-h_a) %>% 
+#   xtable::xtable(type = "latex")
+
+df_r %>% 
+  group_by(h_a) %>% 
+  summarise(
+    home = mean(wins),
+    draw = mean(draws),
+    away = mean(loses)
+  )
+```
+
+
+Win-draw-loss rates by team
+```{r tbl_wdl_teams}
+df_r %>% 
+  group_by(team_name, h_a) %>% 
+  summarise(
+    win = mean(wins),
+    draw = mean(draws),
+    loss = mean(loses)
+  ) %>% 
+  pivot_wider(
+    names_from = "h_a",
+    values_from = win:loss
+  )
+
+```
+
+All epl teams from season 2014 to season 2020 
+
+```{r}
+df_r$team_name %>% unique()
+```
+
+
+# npXG
+
+Non-penalty expected goals along time. LOESS fit.
+
+```{r npxg_smooth}
+df_r %>% 
+  filter(
+    team_name %in% c("Manchester United", "Manchester City", "Liverpool",
+                     "Arsenal", "Chelsea", "Tottenham")
+  ) %>% 
+  ggplot(aes(matchweek, npxG, color = team_name, group = year)) +
+  geom_smooth(se = TRUE, span = 0.5) +
+  geom_point(alpha = 0.5) +
+  facet_grid(team_name ~ year) +
+  scale_color_manual(values = COLS_BIGSIX) +
+  ggtitle("Goles esperados (sin penales) del Big Six", subtitle = "Temporada 2014-2020") +
+  xlab("Jornada") + ylab("npxG") + 
+  theme_bw() +
+  theme(
+    legend.position  = "none"
+  )
+
+```
+
+# Diff npXG
+
+LOESS non penalty expected goals difference between them and the rival
+
+```{r}
+df_r %>% 
+  filter(
+    team_name %in% c("Manchester United", "Manchester City", "Liverpool",
+                     "Arsenal", "Chelsea", "Tottenham")
+  ) %>% 
+  ggplot(aes(matchweek, npxG - npxGA, color = team_name, group = year)) +
+  geom_smooth(se = TRUE, span = 0.5) +
+  geom_point(alpha = 0.5) +
+  facet_grid(team_name ~ year) +
+  ggtitle("Diferencia de goles esperados del Big Six", subtitle = "xG sin penales") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  xlab("Jornada") + ylab("Diferencia npxG") + 
+  scale_color_manual(values = COLS_BIGSIX) +
+  theme_bw() +
+  theme(
+    legend.position  = "none" 
+  )
+
+```
+
+Density per season of each big six
+
+```{r npxg_dsty}
+df_r %>% 
+  filter(
+    team_name %in% c("Manchester United", "Manchester City", "Liverpool",
+                     "Arsenal", "Chelsea", "Tottenham")
+  ) %>% 
+  mutate(
+    team_name = case_when(
+      team_name == "Manchester United" ~ "United",
+      team_name == "Manchester City" ~ "City",
+      TRUE ~ team_name
+    ),
+    year = year - 2000
+  ) %>% 
+  ggplot(aes(npxG - npxGA, group = year)) +
+  geom_density(fill = "grey60") + 
+  facet_grid(team_name ~ year) +
+  ggtitle("Diferencia de goles esperados del Big Six", subtitle = "xG sin penales") +
+  geom_vline(xintercept = 0, linetype = 2) +
+  xlab("Diferencia npxG") + ylab("") + 
+  theme_bw() +
+  theme(
+    legend.position  = "none"
+  )
+
+gph <- last_plot() +
+    theme(
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_blank(),
+    axis.title.x = element_text(size = 25),
+    title = element_text(size = 25),
+    strip.text.x = element_text(size = 20),
+    strip.text.y = element_text(size = 10),
+    legend.position  = "none"
+  )
+
+
+# save
+ggsave('npxGD_density.png', plot = gph, device = png(), path = "Figures/Understats/", width = 17.5, height = 10)
+
+```
+
+Boxplot of the npXGD of the Big Six
+
+```{r npxg_boxplot}
+df_r %>% 
+  filter(
+    team_name %in% c("Manchester United", "Manchester City", "Liverpool",
+                     "Arsenal", "Chelsea", "Tottenham")
+  ) %>% 
+  ggplot(aes(factor(year), npxG - npxGA, color = team_name)) +
+  geom_boxplot(position = "dodge2", size = 2) + 
+  geom_hline(yintercept = 0, linetype = 2) +
+  scale_color_manual(values = COLS_BIGSIX) +
+  ggtitle("Diferencia de goles esperados del Big Six", subtitle = "xG sin penales") +
+  xlab("Temporada") + ylab("Diferencia npxG") + 
+  theme_bw() +
+  guides(color = guide_legend(title = "Equipo")) +
+  theme(
+    legend.position = "bottom",
+  )
+```
+
+# Ponderated stats
+
+decayment of the $\lambda_{j}$ weights
+
+
+```{r weight_decayment}
+expand.grid(
+  t = 1:100,
+  xi = c(0, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 10, Inf) 
+) %>% 
+  mutate(
+    decay = exp(- xi * t),
+    xi = factor(xi, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(t, decay, color = xi, group = xi)) +
+  geom_line(size = 1.5) +
+  scale_y_continuous() +
+  xlab("Tiempo") + ylab("Peso") +
+  ggtitle("Decaimiento exponencial de las observaciones", subtitle = "Por fuerza de decaimiento") +
+  theme_bw()
+
+
+```
+
+Ponderated mean $\bar{X}_{\lambda} = \sum_{j} \lamda_{j} X_{j}$
+
+```{r}
+df_means %>% 
+  filter(
+    team_name %in% c("Aston Villa", "Leicester", "Manchester City","Tottenham")
+  ) %>% 
+  mutate(
+    xi = str_replace(xi, pattern = "wmean_", replacement = ""),
+    xi = factor(xi, labels = c("\u03be = 0", "\u03be = 0.05", "\u03be = 0.1", "\u03be = 0.5",  "\u03be = \u221e"), ordered = TRUE)
+  ) %>% 
+  ggplot(aes(date, mean_value, group = xi)) +
+  geom_point(
+    aes(y=npxGD),
+    color = "gray70",
+    shape = 1
+  ) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray70") +
+  geom_line() +
+  facet_grid(xi ~ team_name) +
+  scale_y_continuous(limits = c()) +
+  scale_x_date(
+    breaks = seq(as.Date("2014-01-01"), as.Date("2021-01-01"), by = "years"),
+    date_labels = "%Y"
+  ) +
+  ggtitle("Media ponderada para los npxGD de la EPL", subtitle = "Variando el valor de \u03be") +
+  xlab("Fecha") + ylab(latex2exp::TeX("$\\bar{x}_{\\lambda}")) +
+  theme_bw() 
+
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 15, angle = 45, vjust = 0.5),
+    axis.text.y = element_text(size = 15),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    strip.text.x = element_text(size = 20),
+    strip.text.y = element_text(size = 20)
+  )
+
+# save
+ggsave('npxGD_meanXi.png', plot = gph, device = png(), path = "Figures/Understats/", width = 17.5, height = 10)
+
+
+```
+
+Ponderated variance $s^{2}_{\lambda} = \sum_{j}\frac{\lambda_{j}}{1 - \sum_{k}\lambda_{k}^{2}}(X_{j} - \bar{X}_{\lambda})^{2}=$ of the big six with $\xi = 0.01$.
+
+```{r npxgd_meanvar}
+# get df at begin and end
+df_beginend <- df_r %>% 
+  group_by(year) %>% 
+  summarise(
+    start_season = min(date),
+    end_season = max(date)
+  )
+
+
+# plot
+df_final %>% 
+  filter(
+    team_name %in% c("Aston Villa", "Leicester", "Manchester City", "Tottenham")
+  ) %>%
+  ggplot(aes(x = date, y = npxGD_ma)) +
+  geom_ribbon(
+    aes(
+      ymin = npxGD_ma - (sqrt(npxGD_var)),
+      ymax = npxGD_ma + (sqrt(npxGD_var))
+    ),
+    fill = "gray70"
+  ) +
+  geom_line(aes(group = 1), color = "black", size = 1) +
+  geom_vline(xintercept = df_beginend$start_season, linetype = 2, alpha = 0.5) +
+  geom_vline(xintercept = df_beginend$end_season, linetype = 1, alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = 1, alpha = 0.5) +
+  geom_label(aes(x = as.Date("2014-08-16"), y = 4.7, label = c("inicio")), size = 6) +
+  geom_label(aes(x = as.Date("2015-05-24"), y = 4.7, label = c("fin")), size = 6) +
+  ggrepel::geom_text_repel(
+    data = tibble(
+      date = as.Date("2020-05-01"),
+      team_name = c("Aston Villa", "Leicester", "Manchester City", "Tottenham"),
+      npxGD_ma = c(-0.8, 0.30, 1.25, -0.41)
+    ),
+    aes(label = "Covid-19"),
+    arrow = arrow(length = unit(0.015, "npc")),
+    point.padding = 0.2,
+    nudge_x = .15,
+    nudge_y = 1.5,
+    size = 6,
+    segment.size = 1
+  ) +
+  facet_wrap( ~ team_name) +
+  scale_x_date(
+    minor_breaks = "2 months", 
+    breaks = c(df_beginend$end_season, df_beginend$start_season),
+    date_labels = "%Y-%m"
+  ) +
+  ggtitle("Serie de tiempo de la media ponderada del npxGD", subtitle = "Más/menos una desviación estándar ponderada") +
+  xlab("Fecha") + ylab("Media") + 
+  theme_bw() 
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 15, angle = 45, vjust = 0.5),
+    axis.text.y = element_text(size = 15),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    strip.text = element_text(size = 17)
+  )
+
+# save
+ggsave('npxGD_meanvar.png', plot = gph, device = png(), path = "Figures/Understats/", width = 17.5, height = 10)
+
+
+
+```
+
+

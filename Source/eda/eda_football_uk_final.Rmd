@@ -1,0 +1,590 @@
+---
+title: "EDA Football Data UK"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup}
+library(tidyverse)
+library(tidyr)
+
+# knitr::opts_chunk$set(echo = TRUE)
+# knitr::opts_knit$set(root.dir = '') 
+getwd()
+```
+
+
+```{r functions}
+
+# functions ---------------------------------------------------------------
+lm_eqn <- function(df){
+  # fit regression
+  model <- lm(final_tt ~ prob + I(prob^2), df)
+  
+  # get r2
+  eq <- substitute(
+    italic(r)^2 ~ "=" ~ r2,
+    list(r2 = format(summary(model)$r.squared, digits = 3))
+  )
+  
+  return(as.character(as.expression(eq)))
+}
+
+
+```
+
+
+```{r readata, warning=FALSE}
+# set working dir (must change)
+# setwd(dir = "C:/Users/Ryo/Documents/Estudios/ITAM/Tesis/sportsAnalytics/tesis/Repository")
+
+# folder 
+folder_files <- "Data/football_uk/final_dbb/"
+
+# read tables
+df_r <- read_csv(file = paste0(folder_files, "footballuk_raw.csv"))
+df_odds <- read_csv(file = paste0(folder_files, "stats_odds.csv"))
+df_updateodds.pinnacle <- read_csv(file = paste0(folder_files, "odds_pinnacle.csv"))
+df_varodds <- read_csv(file = paste0(folder_files, "variance_odds_deciles.csv"))
+df_tt <- read_csv(file = paste0(folder_files, "track_take_books.csv"))
+```
+
+# General stats
+
+```{r gen_stats}
+# numebr of games per season
+df_r %>% count(season)
+
+# teams appareance by season
+df_r %>% 
+  count(hometeam, season) %>% 
+  pivot_wider(
+    names_from = season,
+    names_glue = "season_{season}",
+    values_from = n,
+    values_fill = 0,
+    values_fn = function(x) if_else(!is.na(x), 1, 0)
+  ) %>% 
+  mutate(
+    number_seasons = rowSums(across(where(is.numeric)))
+  )
+
+# referee's appareance
+df_r %>% 
+  count(referee, season) %>% 
+  arrange(referee, season, desc(n)) %>% 
+  ungroup() %>% 
+  group_by(season) %>% 
+  arrange(season) %>% 
+  pivot_wider(
+    names_from = season,
+    names_glue = "season_{season}",
+    values_from = n,
+    values_fill = 0,
+    values_fn = function(x) ifelse(!is.na(x), x, 0)
+  ) %>% 
+  mutate(
+    number_games = rowSums(across(where(is.numeric))),
+    proportion_appearance = number_games / sum(number_games)
+  ) %>% 
+  arrange(desc(number_games))
+```
+
+
+
+# Odds
+
+Look dataframe
+```{r look_dfodds}
+df_odds %>% head()
+```
+
+
+## Distribution Pinnacle Sports (Closing odds)
+
+```{r plot_oddsdist}
+# odds across seasons
+df_r %>% 
+  mutate(
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psch = psch * (final_tt + 1),
+    pscd = pscd * (final_tt + 1),
+    psca = psca * (final_tt + 1)
+  ) %>% 
+  select(
+    season, hometeam, awayteam, psch, psca
+  ) %>% 
+  pivot_longer(
+    cols = psch:psca,
+    names_to = "type_odd",
+    values_to = "odd"
+  ) %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(season, odd, color = type_odd)) +
+  geom_boxplot(position = "dodge") +
+  scale_y_continuous( breaks = 2^(0:5)) +
+  ggtitle("Distribución de momios por temporadas") +
+  xlab("Temporada") + ylab("Momio") +
+  guides(color = guide_legend(title = "Tipo de Momio")) +
+  scale_color_discrete(labels = c("Visitante", "Casa")) +
+  theme_bw()
+
+
+
+
+```
+
+Look if odds are statistically the same across seasons. The rows are in the order:
+
+- Home
+- Draw
+- Away
+
+```{r odds_kruskal}
+# get dataframe by type of odd
+df_aux <- df_r %>% 
+  mutate(
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    season = factor(season, levels = 13:20, ordered = TRUE),
+    psch = psch * (final_tt + 1),
+    pscd = pscd * (final_tt + 1),
+    psca = psca * (final_tt + 1)
+  ) %>% 
+  select(
+    season, hometeam, awayteam, psch, pscd, psca
+  ) %>% 
+  pivot_longer(
+    cols = psch:psca,
+    names_to = "type_odd",
+    values_to = "odd"
+  )
+
+# test kruskal wallis each type of odd 
+df_aux %>% 
+  split(.$type_odd) %>% 
+  map(
+    ~ kruskal.test(
+      odd ~ season,
+      data = .
+    )
+  ) %>% 
+  map_dfr(~ broom::tidy(.))
+
+
+
+
+```
+
+Look odds only by type of outcome of match. We saw that thre isn't evidence to think they are different along seasons at a significance of 1%.
+
+```{r odds_outcome}
+# by type off odd
+df_r %>% 
+  mutate(
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psch = psch * (final_tt + 1),
+    pscd = pscd * (final_tt + 1),
+    psca = psca * (final_tt + 1)
+  ) %>% 
+  select(
+    season, hometeam, awayteam, psch, pscd, psca
+  ) %>% 
+  pivot_longer(
+    cols = psch:psca,
+    names_to = "type_odd",
+    values_to = "odd"
+  ) %>% 
+  ggplot(aes(type_odd, odd)) +
+  geom_violin(fill = "gray50", width = 1.5) +
+  geom_boxplot(width = 0.2, size = 1.2) +
+  scale_y_continuous(trans = "log2", breaks = 2^(0:5), name = "Momio") +
+  scale_x_discrete(labels = c("Visitante", "Empate", "Casa"), name = "") +
+  ggtitle("Distribución de los momios", subtitle = "Momios finales corregidos de Pinnacle Sports") +
+  theme_bw() +
+  coord_flip() 
+
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20, angle = 90),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25)
+  ) 
+
+# save
+ggsave('momios_hda.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+  
+```
+
+
+
+
+## Variablity
+
+Look tables
+```{r odds_var}
+# generate table of corrected odds and probas
+df_change_odds <- df_r %>% 
+  mutate(
+    match_name = paste(hometeam, awayteam, sep = "-"),
+    
+    season = factor(season, levels = 13:20, ordered = TRUE),
+    
+    apriori_tt = 1/psh + 1/psd + 1/psa - 1,
+    posterior_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psh = psh * (apriori_tt + 1),
+    psd = psd * (apriori_tt + 1),
+    psa = psa * (apriori_tt + 1),
+    
+    psch = psch * (posterior_tt + 1),
+    pscd = pscd * (posterior_tt + 1),
+    psca = psca * (posterior_tt + 1),
+    
+    diff_home = psch/psh - 1,
+    diff_draw = pscd/psd - 1,
+    diff_away = psca/psa - 1
+  )
+
+
+# look
+df_change_odds %>% head()
+df_updateodds.pinnacle %>% head()
+```
+
+
+Look how log corrected probabilities, $o_{d} = 1/\tilde{p}$, of pinnacle sports change at the beggining and end before the match.  
+
+```{r plot_logprobas}
+# plot first and last
+df_updateodds.pinnacle %>% 
+  ggplot(aes(log(1/first_odd), log(1/last_odd))) +
+  geom_point(alpha = 0.1) +
+  facet_wrap(. ~ type) +
+  ggtitle("Dispersión de los momios antes y después", subtitle = "Momios corregidos de Pinnacle Sports") +
+  theme_bw() 
+
+```
+
+Look variability by deciles. It grows when there is a clear underdog
+
+```{r look_psdeciles}
+# get deciles
+cat("deciles for odds home\n")
+df_change_odds$psh %>% quantile(1:10/10) 
+
+cat("\ndeciles for odds draw\n")
+df_change_odds$psd %>% quantile(1:10/10)
+
+cat("\ndeciles for odds away\n")
+df_change_odds$psa %>% quantile(1:10/10)
+
+
+```
+
+look dispersion by decile of each odd
+```{r look_varodds}
+# trend
+df_varodds %>% 
+  ggplot(aes(factor(psh_dscrt_level), variance, shape = type, group = type)) +
+  geom_point(size = 8) +
+  geom_line(size = 2) +
+  xlab("Decil") + ylab("Varianza") +
+  ggtitle("Varianza a partir del decil del momio", subtitle = "Diferencia entre el momio inicial y final") +
+  theme_minimal() +
+  scale_shape_discrete(labels = c("Visitante", "Empate", "Casa")) +
+  guides(shape = guide_legend(title = "Tipo de Momio")) +
+  theme_bw() 
+  
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25), 
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 25)
+  ) 
+
+# save
+ggsave('varianza_momio.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+```
+
+
+
+# Track Take
+
+## Comision of bookmarks
+
+Create tables
+
+```{r df_tracktake}
+# create table
+df_tt.summary <- df_tt %>% 
+  group_by(
+    season, books
+  ) %>% 
+  summarise(
+    mean_tt = mean(track_take, na.rm = TRUE),
+    stdev_tt = sd(track_take, na.rm = TRUE),
+    total_obs = sum(!is.na(track_take))
+  ) %>% 
+  ungroup(
+    
+  )
+
+# look tables
+df_tt %>% head()
+df_tt.summary %>% head()
+```
+
+Look comisions of each bookmark
+
+```{r look_comision}
+# plot 
+df_tt.summary %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(x = season, y = mean_tt, shape = books, group = books)) +
+  geom_point(size = 2) +
+  geom_line(linetype = 2) + 
+  geom_errorbar(
+    aes(
+      ymin = mean_tt - qt(p = 1 - 0.01/2, df = total_obs - 1) * stdev_tt / sqrt(total_obs),
+      ymax = mean_tt + qt(p = 1 - 0.01/2, df = total_obs - 1) * stdev_tt / sqrt(total_obs)
+    ),
+    width = 0.2
+  ) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 0.085), breaks = 0:9/100) + 
+  ggtitle("Comisión de las casas de apuestas para la EPL", subtitle = "Intervalo de condianza al 99% para la media de comisión") +
+  xlab("Temporada") + ylab("Comisión") +
+  guides(shape = guide_legend(title = "Casa de Apuesta")) +
+  theme_bw() 
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 25)
+  )
+
+# save
+ggsave('comision_casas.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+
+
+
+```
+
+## Spread of Comisions
+
+Look market efficiency of odds by looking the median of the difference between the max and minimum odd of bookmakers of any type of odd in a game
+
+```{r look_spreads}
+df_odds %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(season, best_spread)) +
+  geom_violin(aes(fill = season), alpha = 0.5) +
+  geom_boxplot(width = 0.2 ) +
+  scale_y_continuous(trans = "log2", breaks = c(0.1, 0.2, 0.5, 2^(0:5))) +
+  ggtitle("Spread de momios de la EPL de 6 casas de apuestas", subtitle = "Escala logarítmica base 2") +
+  scale_fill_grey() +
+  xlab("Temporada") + ylab("Spread") +
+  theme_bw() +
+  theme(
+    legend.position = "none"
+  )
+
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.position = "none"
+  )
+
+# save
+ggsave('spread_momios.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+
+
+```
+
+
+
+## Positive track take
+
+```{r tables_tracktake_negative}
+# get odds and summaries
+df_tt_odds <- df_odds %>% 
+  select(
+    match_name, season, best_spread, market_tracktake
+  ) %>% 
+  left_join(
+    df_r %>% 
+      mutate(
+        match_name = paste(hometeam, awayteam, sep = "-")
+      ) %>% 
+      select(
+        match_name, season, psch:psca
+      ),
+    by = c("match_name", "season")
+  ) %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE),
+    
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psch = psch * (final_tt + 1),
+    prob = 1/psch
+  ) 
+
+df_tt_odds.summary <- df_tt_odds %>% 
+  group_by(season) %>% 
+  summarise(
+    perc_match_goodtt = if_else(market_tracktake < 0, 1, 0) %>% mean(na.rm = TRUE),
+    num_match_goodtt = if_else(market_tracktake < 0, 1, 0) %>% sum(na.rm = TRUE),
+    num_obs = sum(!is.na(market_tracktake))
+  )
+
+
+# bar plot
+df_tt_odds.summary %>% 
+  ggplot(aes(season, perc_match_goodtt)) +
+  geom_bar(stat = "identity", color = "black", size = 1, fill = "grey65") +
+  geom_line(aes(group = 2), size = 2) + 
+  geom_label(aes(label = num_match_goodtt), size = 8) +
+  scale_y_continuous(labels = scales::percent) + 
+  xlab("Temporada") + ylab("Porcentaje") +
+  ggtitle("Partidos con comisión negativa", subtitle = "Número de partidos favorables de los 380 posibles") +
+  theme_bw() 
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.position = "none"
+  )
+
+# save
+ggsave('arbitraje_tracktake.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+  
+# time series
+df_tt_odds.summary %>% 
+  ggplot(aes(season, perc_match_goodtt, group = 1)) +
+  geom_point(aes(color = season), size = 20) +
+  geom_line(aes(color = season), size = 1) +
+  geom_label(aes(label = num_match_goodtt), size = 8) +
+  scale_y_continuous(labels = scales::percent) + 
+  scale_color_grey() + 
+  xlab("Temporada") + ylab("Porcentaje") +
+  ggtitle("Partidos con arbitraje posible de la EPL", subtitle = "Número de partidos favorables de los 380 posibles") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.position = "none"
+  )
+
+# save
+ggsave('arbitraje_tracktake_timeline.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+  
+
+
+```
+
+## Track take and probabilities
+
+Regression between normalized probabilities of pinnacle sports and comision charged
+
+```{r look_tt}
+# get R^2 from cuadratic regression
+equations <- df_r %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE),
+    
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psch = psch * (final_tt + 1),
+    prob = 1/psch
+  ) %>% 
+  plyr::ddply("season", lm_eqn)
+
+# plot
+df_r %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE),
+    
+    final_tt = 1/psch + 1/pscd + 1/psca - 1,
+    
+    psch = psch * (final_tt + 1),
+    prob = 1/psch
+  ) %>% 
+  ggplot(aes(prob, final_tt)) +
+  geom_point(shape = 1, alpha = 0.5) +
+  geom_smooth(formula = y ~ x + I(x^2), method = "lm", color = "black", size = 2, se = FALSE) +
+  geom_text(data = equations, aes(x = 0.15, y = 0.05, label = V1), parse = TRUE, inherit.aes = FALSE, size = 6) +
+  facet_wrap(season ~ .) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
+  scale_x_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1), limits = c(0,1)) +
+  ggtitle("Relación entre la comisión y probabilidad", subtitle = "Momios como Local de Pinnacle Sports") +
+  xlab("Probabilidad") + ylab("Comisión") +
+  theme_bw()
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 25),
+    strip.text.x = element_text(size = 20),
+    strip.text.y = element_text(size = 10)
+  )
+
+# save
+ggsave('regresion_tt.png', plot = gph, device = png(), path = "Figures/Football_UK", width = 17.5, height = 10)
+
+```
+
+
+
+
+
+
+

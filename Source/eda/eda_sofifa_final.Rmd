@@ -1,0 +1,448 @@
+---
+title: "EDA SoFIFA"
+output: html_notebook
+  html_document:
+    df_print: paged
+---
+
+# Notes
+
+By the fact that the data isn't complete per year, problem approximated in `source\wrangling\tidy_sofifa.R`, the data analysis would be over the data and the approximation made for the missing matchweeks per season. We will join all the final tables from football_uk and understats by their date, in order to make data analysis over the same dates.
+
+
+# Setup
+
+```{r setup}
+library(tidyverse)
+library(tidyr)
+
+getwd()
+```
+
+
+# Read data
+
+Read files made in `source\wrangling\`
+
+```{r read_data, warning=FALSE}
+# read data
+df_understats.r <- read_csv("Data/Understat/final_dbb/understat_finaldbb.csv")
+df_football.r <- read_csv("Data/football_uk/final_dbb/footballuk_finaldbb.csv")
+df_sofifa.r <- read_csv("Data/SoFIFA/final_dbb/sofifa_finaldbb.csv")
+
+```
+
+
+# Merge 
+
+First get the distinct names for the same team per table
+
+```{r table_names}
+df_teamnames <- tibble(
+  team_understats = df_understats.r$team_name %>% unique() %>% sort(),
+  team_football = df_football.r$hometeam %>% unique()  %>% sort(),
+  team_sofifa = df_sofifa.r$name_team %>% unique()  %>% sort()
+) %>% 
+  mutate(
+    official_name = team_football %>% str_to_lower() %>% str_replace(pattern = " ", replacement = "_"),
+    official_name = if_else(official_name == "qpr", "queens_rangers", official_name)
+  ) 
+
+df_teamnames
+
+```
+
+Set the same names
+
+```{r set_names}
+# for understats
+df_understats.r <- df_understats.r %>% 
+  left_join(
+    df_teamnames %>% select(team_understats, official_name),
+    by = c("team_name" = "team_understats")
+  )
+
+# for football_uk
+df_football.r <- df_football.r %>% 
+  left_join(
+    df_teamnames %>% select(team_football, official_name),
+    by = c("hometeam" = "team_football")
+  ) %>% 
+  left_join(
+    df_teamnames %>% select(team_football, official_name),
+    by = c("awayteam" = "team_football"),
+    suffix = c(".home", ".away")
+  )
+
+# for sofifa
+df_sofifa.r <- df_sofifa.r %>% 
+  left_join(
+    df_teamnames %>% select(team_sofifa, official_name),
+    by = c("name_team" = "team_sofifa")
+  )
+
+```
+
+
+# Data wrangle
+
+Lead observations. It doesnt make sense to look how is a team in a given date looking how they did in the same date. So, we should lag observations by a matchweek.
+
+```{r table_lags}
+# understats
+df_understats <- df_understats.r %>% 
+  arrange(team_name, date) %>% 
+  group_by(team_name) %>% 
+  mutate(
+    npxGD_ma = lag(npxGD_ma, n = 1, default = NA),
+    npxGD_var = lag(npxGD_var, n = 1, default = NA),
+    year_date = lubridate::year(date) - 2000, # creating keys for future join between tables
+    week_date = lubridate::isoweek(date),
+    season = year - 2000
+  ) %>% 
+  ungroup() %>% 
+  select(
+    season, matchweek, official_name,
+    position_table:npxGD_var
+  ) %>% 
+  rename(
+    team = official_name
+  )
+
+# football_uk
+df_football <- df_football.r %>% 
+  group_by(season) %>% 
+  mutate(
+    matchweek = ((row_number() -1) %/% 10) + 1 # create matchweek (are sorted)
+  ) %>% 
+  ungroup() %>% 
+  select(
+    season, date, matchweek,
+    official_name.home, official_name.away, result,
+    starts_with("max_odds"), market_tracktake, psch:psca,
+    starts_with("diff")
+  ) %>% 
+  rename(
+    hometeam = official_name.home,
+    awayteam = official_name.away
+  )
+
+# sofifa
+df_sofifa <- df_sofifa.r %>% 
+  mutate(
+    season = str_extract(fifa, "[[:digit:]]+") %>% as.integer() - 1
+  ) %>% 
+  select(
+    season, week_date, official_name, ova:was_na
+  ) %>%
+  rename(
+    team = official_name
+  )
+
+```
+
+
+Join data in a main dataframe
+
+```{r get_dfmain}
+df_main <- df_football %>% 
+  inner_join(
+    df_understats,
+    by = c("season", "matchweek", "hometeam" = "team")
+  ) %>% 
+  inner_join(
+    df_understats ,
+    by = c("season", "matchweek", "awayteam" = "team"),
+    suffix = c(".home", ".away")
+  ) %>% 
+  mutate(
+    week_date = lubridate::isoweek(date)
+  ) %>% 
+  inner_join(
+    df_sofifa,
+    by = c("season", "week_date", "hometeam" = "team")
+  ) %>% 
+  inner_join(
+    df_sofifa %>% select(-was_na),
+    by = c("season", "week_date", "awayteam" = "team"),
+    suffix = c(".home", ".away")
+  ) 
+
+df_main %>% head()
+```
+
+
+# Exploratory Data Analysis
+
+## Data sanity
+
+There is going to be 1 less matchweek by the fact of the `NA` induced by `lag(npxGD_*)` in the `inner_join()`.
+
+Look the number of `NA` in sofifa weeks. All ok.
+
+```{r look_na}
+df_main %>% 
+  group_by(season) %>% 
+  summarise(
+    prop_na = sum(was_na) / n()
+  )
+
+```
+
+
+## Stats
+
+Get the mean and standard dev. for the grades of the teams. First get aggregates
+
+```{r get_summarystats}
+# how much changes sofifa variables between teams per season #
+# get data
+df_weeks <- df_main %>% 
+  select(
+    season, week_date
+  ) %>% 
+  unique()
+
+# get with all the matches
+df_sofifa.used_data <- df_sofifa %>% 
+  semi_join(
+    df_weeks,
+    by = c("season", "week_date")
+  )
+
+# aggregate data
+df_stats_sofifa <- df_sofifa.used_data %>% 
+  group_by(
+    season, team
+  ) %>% 
+  summarise_at(
+    vars(ova:taa),
+    list(mean=mean, sd=sd),
+    na.rm = TRUE
+  ) %>% 
+  left_join(
+    df_weeks %>% count(season) %>% rename(num_obs = n), # 
+    by = "season"
+  ) %>% 
+  ungroup(
+    
+  )
+
+# pivot longer
+df_stats_sofifa.mean <-  df_stats_sofifa %>% 
+  select(
+    season, team, ova_mean:def_mean
+  ) %>% 
+  pivot_longer(
+    cols = ova_mean:def_mean,
+    names_to = "type_stat",
+    values_to = "mean_value"
+  ) %>% 
+  mutate(
+    type_stat = str_replace(type_stat, pattern = "_mean", replacement = "")
+  )
+
+df_stats_sofifa %>% head()
+```
+
+Next, get mean and std
+
+```{r get_mean_std}
+df_stats_sofifa.mean <-  df_stats_sofifa %>% 
+  select(
+    season, team, ova_mean:def_mean
+  ) %>% 
+  pivot_longer(
+    cols = ova_mean:def_mean,
+    names_to = "type_stat",
+    values_to = "mean_value"
+  ) %>% 
+  mutate(
+    type_stat = str_replace(type_stat, pattern = "_mean", replacement = "")
+  )
+
+df_stats_sofifa.sd <-  df_stats_sofifa %>% 
+  select(
+    season, team, ova_sd:def_sd, num_obs
+  ) %>% 
+  pivot_longer(
+    cols = ova_sd:def_sd,
+    names_to = "type_stat",
+    values_to = "std_value"
+  ) %>% 
+  mutate(
+    type_stat = str_replace(type_stat, pattern = "_sd", replacement = "")
+  )
+
+df_stats_sofifa.sd
+df_stats_sofifa.mean
+
+```
+
+
+
+Plot mean with sd of OVA, ATT, MEAN, DEF
+
+```{r plt_teams}
+df_stats_sofifa.mean %>% 
+  left_join(
+    df_stats_sofifa.sd,
+    by = c("season", "team", "type_stat")
+  ) %>% 
+  filter(
+    team %in% c("arsenal", "chelsea",  "liverpool", "man_united", "man_city", "tottenham")
+  ) %>% 
+  mutate(
+    team = case_when(
+      team == "man_united" ~ "United",
+      team == "man_city" ~ "City",
+      TRUE ~ team
+    ),
+    team = str_to_title(team),
+    type_stat = case_when(
+      type_stat == "att" ~ "Ataque",
+      type_stat == "mid" ~ "Media",
+      type_stat == "def" ~ "Defensa",
+      type_stat == "ova" ~ "General"
+    ),
+    type_stat = factor(type_stat, levels = c("General", "Ataque", "Media", "Defensa"), ordered = TRUE)
+  ) %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(x = season, y = mean_value, shape = type_stat, group = type_stat)) +
+  geom_point(size = 2) +
+  geom_line(aes(linetype = type_stat)) + 
+  geom_errorbar(
+    aes(
+      ymin = mean_value - qt(p = 1 - 0.01/2, df = num_obs - 1) * std_value / sqrt(num_obs),
+      ymax = mean_value + qt(p = 1 - 0.01/2, df = num_obs - 1) * std_value / sqrt(num_obs)
+    ),
+    width = 0.2
+  ) + 
+  scale_linetype_manual(values = c("solid", "dashed", "dashed", "dashed")) +
+  scale_shape_manual(values = c(19, 0, 1, 2)) +
+  ggtitle("Calificación de EA Sports de los equipos de la EPL", subtitle = "Intervalo de confianza al 99% para la media de calificaciones") +
+  xlab("Temporada") + ylab("Calificación") +
+  guides(shape = guide_legend(title = "Tipo"), linetype = guide_legend(title = "Tipo")) +
+  theme_bw() +
+  facet_wrap(team ~ .)
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 25),
+    strip.text.x = element_text(size = 20)
+  ) 
+
+
+# save
+ggsave('general_stats_sofifa.png', plot = gph, device = png(), path = "Figures/SoFIFA/", width = 17.5, height = 10)
+
+```
+
+
+Tranfer market
+
+```{r get_transfer}
+# value of team per season
+df_means_transfer <- df_stats_sofifa %>% 
+  group_by(season) %>% 
+  summarise(mean_transfer = mean(transfer_budget_mean))
+
+df_stats_sofifa.transfer <- df_stats_sofifa %>% 
+  add_row(
+    season = df_means_transfer$season,
+    transfer_budget_mean = df_means_transfer$mean_transfer,
+    team = "mean_team"
+  ) %>% 
+  mutate(
+    type_data = ifelse(team == "mean_team", 1, 0) 
+  )
+
+df_stats_sofifa.transfer %>% head()
+
+```
+
+
+```{r plt_transfer}
+df_stats_sofifa.transfer %>% 
+  mutate(
+    season = factor(season, levels = 13:20, ordered = TRUE)
+  ) %>% 
+  ggplot(aes(season, transfer_budget_mean, group = team)) +
+  geom_point(aes(shape = factor(type_data)), size = 4) +
+  geom_line(aes(linetype = factor(type_data))) +
+  ggrepel::geom_text_repel(
+    data = df_stats_sofifa.transfer %>% filter(season == 20) %>%  mutate(season = factor(season, levels = 13:20, ordered = TRUE)),
+    aes(label = team),
+    nudge_x = 10,
+    direction = "y",
+    size = 5
+  ) +
+  ggrepel::geom_label_repel(
+    data = df_stats_sofifa.transfer %>% filter(team == "mean_team") %>%  mutate(season = factor(season, levels = 13:20, ordered = TRUE)),
+    aes(label = scales::dollar(transfer_budget_mean, accuracy = 2, suffix = "€", prefix = "")),
+    direction = "y",
+    nudge_y = 5,
+    size = 5
+  ) +
+  guides(size = FALSE, shape = guide_legend("Tipo"), linetype = guide_legend("Tipo")) +
+  scale_shape_manual(values = c(1, 19), labels = c("Equipo", "Promedio")) +
+  scale_linetype_manual(values = c("dashed", "solid"), labels = c("Equipo", "Promedio")) +
+  scale_y_continuous(labels = scales::dollar_format(accuracy = 2, suffix = "€", prefix = "")) +
+  xlab("Temporada") + ylab("Millones de euros") +
+  ggtitle("Presupuesto del equipo en el mercado de transferencias") +
+  theme_bw() 
+
+gph <- last_plot() +
+  theme(
+    axis.text.x = element_text(size = 20),
+    axis.text.y = element_text(size = 20),
+    axis.title.x = element_text(size = 25),
+    axis.title.y = element_text(size = 25),
+    title = element_text(size = 25),
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 25),
+    legend.position = "bottom",
+    strip.text.x = element_text(size = 20)
+  ) 
+
+# save
+ggsave('transfer_budget.png', plot = gph, device = png(), path = "Figures/SoFIFA/", width = 17.5, height = 10)
+
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
