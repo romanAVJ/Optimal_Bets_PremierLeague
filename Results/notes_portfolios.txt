@@ -1,0 +1,42 @@
+################################################################################
+                            Notas Portafolios
+################################################################################
+#### markowitz ####
+1. La jornada 34 y 24 presentan una degeneración a la apuesta de un solo partido
+de manera "diversificada" entre los outcomes internos. Probablemente es una
+degeneración a partir de la matriz de varianzas y covarianzas
+
+
+2. Revisar dichos portafolios con pyfopt (ok)
+
+3. Se entregan 2 x's aunque solo se usa 1: la óptima y la redondeada a los dígitos
+que se deseen
+
+#### kelly ####
+# kelly incompleto -------------------------------------------------------------
+Las apuestas más fuertes que realiza el modelo, son las _no_ pegan jaja
+Si se penalizara el stake de kelly con la norma del vector, quizá mejoraría
+mucho el modelo.
+Un lasso-ridge podría ser
+
+
+
+
+#### general ####
+1. Estoy pidiendo que la tolerancia de convergencia sea de 1e-15 para converger,
+en 1e-12, todas las funciones convergen
+
+
+2. Aunque supuse dinero completamente divisible, si mi apuesta tiene más de 4 ceros
+entonces _no_ ejerso la posición
+
+#### metricas ####
+sharpe max y log growth max
+se calculan con los stakes obtenidos y se argumenta que son los óptimos a una precision
+de 4 dígitos
+
+duda en las métricas
+
+
+#### comisión ####
+duda si tomar la comisión como el producto punto

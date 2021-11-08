@@ -3,3 +3,12 @@ Figures/
 
 # ignore cache #
 *.Rhistory
+
+# ignore financial playground #
+Source/financial_model/combinatorics_playground.py
+Source/financial_model/evaluate_model.R
+Source/financial_model/evaluate_model_markowitz.R
+Source/financial_model/kelly_criterion_onevent.py
+Source/financial_model/kelly_criterion_optimization.py
+Source/financial_model/kelly_playground.py
+Source/financial_model/markowitz_optimization.py

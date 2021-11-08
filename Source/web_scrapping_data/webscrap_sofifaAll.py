@@ -345,7 +345,7 @@ urls_fifa_raw = get_fifa_urls(dummy_soup)
 urls_fifa = {k: v for k, v in urls_fifa_raw.items() if is_atleast(k, mini=14)}
 
 # pull data
-lists_dataframes_raw = data_sofifa(urls_fifa15, time_sleep=2)
+lists_dataframes_raw = data_sofifa(urls_fifa, time_sleep=2)
 
 # %% tidy 
 # tidy data

@@ -1,0 +1,32 @@
+###############################################################################
+                          Posibles conclusiones
+###############################################################################
+
+# Futuras Investigaciones -----------------------------------------------------
+1. Ver como se desempeña el modelo de apostar al que más probabilidad de ganar tiene
+  - comparar odds vs probas
+  - alguna métrica de diferencia, entonces apostar
+
+
+2. De la tabla de métricas
+1. Un PCA o algún análisis de métricas que "predigan" el desempeño del portafolio
+2. Algun ajuste de regresión que explique el performance del portafolio
+
+
+3. Ver modelos de portafolios con penalización en las estrategias
+l2, l1 y elastic net
+
+
+4. Simulaciones dirichlet
+Seería interesante suponer probas apriori con esta distribución y hacer el update
+ya sea con los conteos o con algun otro tipo de inferencia
+
+Sería interesante ver estrategias a priori de apuestas degeneradas con Simulaciones
+- todo a casa/empate/visita
+- diversificacion
+- long shot
+
+5. Ver si las medidas de crecimiento (sharpe ratio) y log growth están relacionadas
+con la riqueza esperada (una regresión lineal/ scatter plot)
+
+Quizá controlar por matchweek

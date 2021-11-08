@@ -399,10 +399,10 @@ df_stake_vars <- df_main1 %>%
 
 
 #### write csv ####
-write_csv(df_nn_vars1, file = "Data/Main_DBB/model_myscale.csv")
-write_csv(df_nn_vars2, file = "Data/Main_DBB/model_original.csv")
-write_csv(df_nn_vars3, file = "Data/Main_DBB/model_interactions.csv")
-write_csv(df_stake_vars, file = "Data/Main_DBB/stake_odds.csv")
+# write_csv(df_nn_vars1, file = "Data/Main_DBB/model_myscale.csv")
+# write_csv(df_nn_vars2, file = "Data/Main_DBB/model_original.csv")
+# write_csv(df_nn_vars3, file = "Data/Main_DBB/model_interactions.csv")
+# write_csv(df_stake_vars, file = "Data/Main_DBB/stake_odds.csv")
 
 
 
