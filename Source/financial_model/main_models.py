@@ -697,7 +697,7 @@ def bets_simulation(tournment, n_sim=1e+3, kforce=1, fractional=1, xmin=1e-4, se
 def median_simulation_wealth(fractional, kforce, tournment, n_sim=1e+3, xmin=1e-4, seed=8):
     # generate simualation
     bets_sim_aux = bets_simulation(
-        tournment=dict_best_games,
+        tournment=tournment,
         n_sim=n_sim, 
         kforce=kforce,
         fractional=fractional,
@@ -881,13 +881,15 @@ def model_summary(model):
         'model': '_'.join((model_name, type_name, fractional_name)),
         'final_wealth': df_stats['cumm_wealth'].iloc[-1],
         'total_bets': df_stats['num_stakes'].sum(),
+        'mean_num_bets_per_matchweek': df_stats['num_stakes'].mean(),
+        'mean_wage_bet_per_matchweek': df_stats['percent_wage'].mean(),
         'total_hits': df_stats['total_hits'].sum() / df_stats['num_stakes'].sum(),
         'mean_sharpe': df_stats['sharpe_ratio'].mean(),
         'mean_log_growth': df_stats['log_growth'].mean(),
+        'mean_volatility': df_stats['volatility'].mean(),
         'pval_bets': sstats.ttest_1samp(all_bets, popmean=0, alternative='greater')[1],
         'pval_wealth': sstats.ttest_1samp(df_stats['wealth'], popmean=0, alternative='greater')[1]      
-    }
-    
+    }    
     
     return(dict_out)
 
@@ -1098,8 +1100,8 @@ def fractional_models(tournment, df, type_model='kelly', fractions=[1, 0.75, 0.5
     
     # labels
     last_game = last_wn.iloc[0, 1]
-    ss = ['f' + str(round(100*f)) + '%' for f in lista]
-    n_plot = len(lista)
+    ss = ['f' + str(round(100*f)) + '%' for f in fractions]
+    n_plot = len(fractions)
     txt_ss = [plt.text(last_game + 2, last_wn.iloc[i, 2], ss[i], fontsize=15) for i in range(n_plot)]
     
     adjust_text(
@@ -1367,7 +1369,7 @@ df_work = df_all.query("season == 20 & matchweek >= 18")
 df_work_best = (
     # get expected value for each event
     df_work.assign(
-        rho = lambda x: x['odds'] * x['probas'] - 1    
+        rho = lambda x: (x['odds'] * x['probas'] - 1)  
     )
     # sort games in ascending order with respected the expected gain
     .sort_values( 
@@ -1440,6 +1442,7 @@ mktz_incomplete = portfolios_optimization(
 
 
 # %% 4 Evaluate models
+eval_kelly_general = model_summary(kelly_general)
 eval_kelly_incomplete = model_summary(kelly_incomplete)
 eval_mktz_incomplete = model_summary(mktz_incomplete)
 

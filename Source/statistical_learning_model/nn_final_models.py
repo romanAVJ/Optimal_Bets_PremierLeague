@@ -519,7 +519,6 @@ def fit_model(dbb, model, seed=42):
 
     return()
 
-
 def eval_model(dbb, model, nsplit_cv=5, ntest_cv=1, verbose=True, seed=42):
     # merge train and validation in one dataframe
     X_list = [v2 for k1, dics in dbb.items() if k1 != 'test' for k2, v2 in dics.items() if k2 == "X"]
