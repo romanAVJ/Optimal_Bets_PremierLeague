@@ -26,7 +26,7 @@ fetch_write_season <- function(season=2020, path){
 
 #### main ####
 # seasons
-seasons <- 2020:2020
+seasons <- 2016:2020
 path <- "Data/Understat/"
 
 # read data and write it

@@ -1,6 +1,3 @@
-# ignore Figures #
-Figures/
-
 # ignore cache #
 *.Rhistory
 
@@ -12,3 +9,12 @@ Source/financial_model/kelly_criterion_onevent.py
 Source/financial_model/kelly_criterion_optimization.py
 Source/financial_model/kelly_playground.py
 Source/financial_model/markowitz_optimization.py
+
+# ignore neural networks playhround #
+Source/statistical_learning_model/nn_final_models.py
+Source/statistical_learning_model/nn_model.py
+Source/statistical_learning_model/variable_selection_lasso_nn.py
+Source/statistical_learning_model/variable_selection_lassoCV_nn.py
+
+# ignore all notes #
+Results/notes*

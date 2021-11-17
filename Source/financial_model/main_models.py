@@ -273,6 +273,7 @@ def portfolio_volatility(bets, sigma):
     # get volatitilty defined as total variance
     vol = np.dot(bets, np.matmul(sigma, bets)) # x'S x
 
+    # if the matrix isn't completelty semi positive definite:
     return(vol)
 
 def portfolio_volatility_jac(bets, sigma):
@@ -756,7 +757,7 @@ def get_dummies_results(df, var='y', prefix='y'):
 def get_df():
     
     # read dataframes
-    df_prediction = pd.read_csv("Results\\statistical_estimates\\ridge_prediction.csv")
+    df_prediction = pd.read_csv("Results\\statistical_estimates\\dropout_prediction.csv")
     df_odds = pd.read_csv("Data\\Main_DBB\\stake_odds.csv")
     
     # join frames
@@ -1205,156 +1206,156 @@ def eval_bet(bet, result, odd):
 # %%main
 # =============================================================================
 # %% 0 kelly examples
-eps = 1e-15
-# games
-p_aux = 1/2
-o_aux = 5
+# eps = 1e-15
+# # games
+# p_aux = 1/2
+# o_aux = 5
 
-game_aux = {
-    'id_game': 0,
-    'num_events': 1,
-    'num_games': 1,
-    'odds': np.array([o_aux]),
-    'probas': np.array([p_aux])
-    }
+# game_aux = {
+#     'id_game': 0,
+#     'num_events': 1,
+#     'num_games': 1,
+#     'odds': np.array([o_aux]),
+#     'probas': np.array([p_aux])
+#     }
 
-# get params
-params_aux = get_portfolio_params(game_aux)
+# # get params
+# params_aux = get_portfolio_params(game_aux)
 
-# look kelly bell
-ll = np.linspace(0, 1, 100)
-gl_aux = [log_growth(np.array([bet]), Wt=params_aux['Wt'], probs=params_aux['proba_posibilities']) for bet in ll]
-# lc = 
-aux_opt = kelly_stake(
-    games=game_aux,
-    params=params_aux    
-    )
-
-
-# find root for G(l)
-l_opt = aux_opt['x_opt'].squeeze()
-sol = optimize.root_scalar(f=scalar_log_growth, x0=0.4, args=(p_aux, o_aux - 1), method='brentq', bracket=(0.1, 0.9))
-lc = sol.root
-
-# plot
-fig, ax = plt.subplots()
-ax.plot(ll, gl_aux, color='black')
-
-# annotate
-s = f"momios decimales: {o_aux} \nprobabilidad: {p_aux}"
-at = AnchoredText(
-    s,
-    prop=dict(size=25),
-    frameon=True,
-    loc='lower left'
-)
-at.patch.set_boxstyle("round")
-ax.add_artist(at)
-
-# show 0 threshold
-plt.axhline(y=0, linewidth=0.8, color='black')
-plt.axvline(x=aux_opt['x_opt'], color='gray', linestyle='-.')
-plt.axvline(x=lc,  color='gray', linestyle='-.')
-
-# pretty graph
-plt.ylabel('$G(l)$', fontsize=20)
-plt.xlabel('Fracción de Riqueza Apostada $l$', fontsize=20)
-plt.title('Log-Crecimiento', fontsize=30)
-
-ax.set_xticks([0, 0.075, l_opt, 0.5, 0.675, lc, 0.9, 1])
-ax.set_xticklabels(["0%", '$l_{*}^{-}$', '$l_{*}$',  "50%", '$l_{*}^{+}$', '$l_{c}$', '$l_{c}^{+}$', "100%"])
-ax.tick_params(axis='both', which='major', labelsize=50)
-
-# reescale plot
-fig.tight_layout(rect=[0, 0.03, 1*2, 0.95*2])
-ax.tick_params(axis='both', which='major', labelsize=20)
-plt.show()
+# # look kelly bell
+# ll = np.linspace(0, 1, 100)
+# gl_aux = [log_growth(np.array([bet]), Wt=params_aux['Wt'], probs=params_aux['proba_posibilities']) for bet in ll]
+# # lc = 
+# aux_opt = kelly_stake(
+#     games=game_aux,
+#     params=params_aux    
+#     )
 
 
-# %% 0.1 simulated growth before l_opt in l_opt post l_opt in lc and post lc
-N = 1000
-rng = np.random.default_rng(42)
-results_sim = rng.binomial(n=1, p=p_aux, size=N)
+# # find root for G(l)
+# l_opt = aux_opt['x_opt'].squeeze()
+# sol = optimize.root_scalar(f=scalar_log_growth, x0=0.4, args=(p_aux, o_aux - 1), method='brentq', bracket=(0.1, 0.9))
+# lc = sol.root
 
-# generate dataframe
-df_sim_kelly = (
-    # generate dataframe
-    pd.DataFrame({
-        'trail': range(1,N+1),
-        'result': results_sim,
-        'l_opt_minus': eval_bet(0.075, results_sim, o_aux),    
-        'l_opt': eval_bet(l_opt, results_sim, o_aux),    
-        'l_opt_plus': eval_bet(0.675, results_sim, o_aux),    
-        'l_c': eval_bet(lc, results_sim, o_aux),    
-        'l_c_plus': eval_bet(0.9, results_sim, o_aux)    
-    })
-    # pivot longer
-    .melt(
-        id_vars='trail',
-        value_vars=['l_opt_minus', 'l_opt', 'l_opt_plus', 'l_c', 'l_c_plus'],
-        var_name='strategy',
-        value_name='wealth'
-    )
-    # generate wealth
-    .assign(
-        cumm_wealth = lambda x: x.groupby('strategy').\
-            transform(lambda x: np.cumprod(x+1))['wealth']
-    )
-    # concat matchweek '0' with wealth = 1 to dataframe
-    .groupby('strategy')
-    .apply(
-        lambda x: x.append({'strategy': x.name, 'cumm_wealth': 1, 'trail': 0}, ignore_index=True)
-    )
-    .apply(lambda x: x.reset_index(drop=True))
-    .sort_values(['strategy', 'trail'])
-    .reset_index(drop=True)
-)
+# # plot
+# fig, ax = plt.subplots()
+# ax.plot(ll, gl_aux, color='black')
 
-# init plot
-fig, ax = plt.subplots()
+# # annotate
+# s = f"momios decimales: {o_aux} \nprobabilidad: {p_aux}"
+# at = AnchoredText(
+#     s,
+#     prop=dict(size=25),
+#     frameon=True,
+#     loc='lower left'
+# )
+# at.patch.set_boxstyle("round")
+# ax.add_artist(at)
 
-# plot lines
-df_sim_kelly.set_index('trail', inplace=True)
-df_sim_kelly.groupby('strategy')['cumm_wealth'].plot(color='gray', ax=ax)
+# # show 0 threshold
+# plt.axhline(y=0, linewidth=0.8, color='black')
+# plt.axvline(x=aux_opt['x_opt'], color='gray', linestyle='-.')
+# plt.axvline(x=lc,  color='gray', linestyle='-.')
 
-# make space 4 labels
-MOVEMENT = 100
-left, right = plt.xlim()
-plt.xlim((left, right + MOVEMENT))
+# # pretty graph
+# plt.ylabel('$G(l)$', fontsize=20)
+# plt.xlabel('Fracción de Riqueza Apostada $l$', fontsize=20)
+# plt.title('Log-Crecimiento', fontsize=30)
+
+# ax.set_xticks([0, 0.075, l_opt, 0.5, 0.675, lc, 0.9, 1])
+# ax.set_xticklabels(["0%", '$l_{*}^{-}$', '$l_{*}$',  "50%", '$l_{*}^{+}$', '$l_{c}$', '$l_{c}^{+}$', "100%"])
+# ax.tick_params(axis='both', which='major', labelsize=50)
+
+# # reescale plot
+# fig.tight_layout(rect=[0, 0.03, 1*2, 0.95*2])
+# ax.tick_params(axis='both', which='major', labelsize=20)
+# plt.show()
+
+
+# # %% 0.1 simulated growth before l_opt in l_opt post l_opt in lc and post lc
+# N = 1000
+# rng = np.random.default_rng(42)
+# results_sim = rng.binomial(n=1, p=p_aux, size=N)
+
+# # generate dataframe
+# df_sim_kelly = (
+#     # generate dataframe
+#     pd.DataFrame({
+#         'trail': range(1,N+1),
+#         'result': results_sim,
+#         'l_opt_minus': eval_bet(0.075, results_sim, o_aux),    
+#         'l_opt': eval_bet(l_opt, results_sim, o_aux),    
+#         'l_opt_plus': eval_bet(0.675, results_sim, o_aux),    
+#         'l_c': eval_bet(lc, results_sim, o_aux),    
+#         'l_c_plus': eval_bet(0.9, results_sim, o_aux)    
+#     })
+#     # pivot longer
+#     .melt(
+#         id_vars='trail',
+#         value_vars=['l_opt_minus', 'l_opt', 'l_opt_plus', 'l_c', 'l_c_plus'],
+#         var_name='strategy',
+#         value_name='wealth'
+#     )
+#     # generate wealth
+#     .assign(
+#         cumm_wealth = lambda x: x.groupby('strategy').\
+#             transform(lambda x: np.cumprod(x+1))['wealth']
+#     )
+#     # concat matchweek '0' with wealth = 1 to dataframe
+#     .groupby('strategy')
+#     .apply(
+#         lambda x: x.append({'strategy': x.name, 'cumm_wealth': 1, 'trail': 0}, ignore_index=True)
+#     )
+#     .apply(lambda x: x.reset_index(drop=True))
+#     .sort_values(['strategy', 'trail'])
+#     .reset_index(drop=True)
+# )
+
+# # init plot
+# fig, ax = plt.subplots()
+
+# # plot lines
+# df_sim_kelly.set_index('trail', inplace=True)
+# df_sim_kelly.groupby('strategy')['cumm_wealth'].plot(color='gray', ax=ax)
+
+# # make space 4 labels
+# MOVEMENT = 100
+# left, right = plt.xlim()
+# plt.xlim((left, right + MOVEMENT))
     
-# labels
-last_sim = df_sim_kelly.groupby('strategy').tail(1)
-ss = ['$l_{c}$', '$l_{c}^{+}$', '$l_{*}$', '$l_{*}^{-}$', '$l_{*}^{+}$']
-n_plot = len(ss)
-txt_ss = [plt.text(N + MOVEMENT, last_sim.iloc[i, 2], ss[i], fontsize=21) for i in range(n_plot)]
+# # labels
+# last_sim = df_sim_kelly.groupby('strategy').tail(1)
+# ss = ['$l_{c}$', '$l_{c}^{+}$', '$l_{*}$', '$l_{*}^{-}$', '$l_{*}^{+}$']
+# n_plot = len(ss)
+# txt_ss = [plt.text(N + MOVEMENT, last_sim.iloc[i, 2], ss[i], fontsize=21) for i in range(n_plot)]
 
-adjust_text(
-    txt_ss,
-    only_move={'points':'y', 'text':'y'}, 
-    # autoalign='xy',
-    expand_objects=(20, 40),
-    force_points=1e+2,
-    force_objects=1e+2,
-    force_text=1e+1,
-    lim=100
-)
+# adjust_text(
+#     txt_ss,
+#     only_move={'points':'y', 'text':'y'}, 
+#     # autoalign='xy',
+#     expand_objects=(20, 40),
+#     force_points=1e+2,
+#     force_objects=1e+2,
+#     force_text=1e+1,
+#     lim=100
+# )
 
-# show 0 threshold
-plt.axhline(y=1, linewidth=0.9, color='gray', linestyle='-.')
+# # show 0 threshold
+# plt.axhline(y=1, linewidth=0.9, color='gray', linestyle='-.')
 
-# pretty graph
-plt.ylabel('$W_{n}$', fontsize=20)
-plt.xlabel('Simulación', fontsize=20)
-plt.title('Riqueza por Estrategia', fontsize=30)
-ax.tick_params(axis='both', which='major', labelsize=50)
-ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
-plt.yscale('log')
+# # pretty graph
+# plt.ylabel('$W_{n}$', fontsize=20)
+# plt.xlabel('Simulación', fontsize=20)
+# plt.title('Riqueza por Estrategia', fontsize=30)
+# ax.tick_params(axis='both', which='major', labelsize=50)
+# ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
+# plt.yscale('log')
 
-# reescale plot
-fig.tight_layout(rect=[0, 0.03, 1*2, 0.95*2])
-ax.tick_params(axis='both', which='major', labelsize=20)    
+# # reescale plot
+# fig.tight_layout(rect=[0, 0.03, 1*2, 0.95*2])
+# ax.tick_params(axis='both', which='major', labelsize=20)    
 
-plt.show()
+# plt.show()
 
 
 
@@ -1395,12 +1396,12 @@ dict_best_games = get_games_dict(df_work_best)
 
 #%%  3. Optimization 
 # incomplete kelly
-kelly_incomplete = portfolios_optimization(
-    tournment=dict_best_games,
-    df=df_work,
-    stake_model='kelly',
-    fractional=1
-)
+# kelly_incomplete = portfolios_optimization(
+#     tournment=dict_best_games,
+#     df=df_work,
+#     stake_model='kelly',
+#     fractional=1
+# )
 
 # kelly_incomplete_50 = portfolios_optimization(
 #     tournment=dict_best_games,
@@ -1410,20 +1411,20 @@ kelly_incomplete = portfolios_optimization(
 # )
 
 # complete kelly
-kelly_general = portfolios_optimization(
-    tournment=dict_games,
-    df=df_work,
-    stake_model='kelly',
-    fractional=1
-)
+# kelly_general = portfolios_optimization(
+#     tournment=dict_games,
+#     df=df_work,
+#     stake_model='kelly',
+#     fractional=1
+# )
 
 # incomplete markowitz
-mktz_incomplete = portfolios_optimization(
-    tournment=dict_best_games,
-    df=df_work,
-    stake_model='markowitz',
-    fractional=1
-)
+# mktz_incomplete = portfolios_optimization(
+#     tournment=dict_best_games,
+#     df=df_work,
+#     stake_model='markowitz',
+#     fractional=1
+# )
 
 # mktz_incomplete_50 = portfolios_optimization(
 #     tournment=dict_best_games,
@@ -1433,12 +1434,12 @@ mktz_incomplete = portfolios_optimization(
 # )
 
 # complete markowitz
-# mktz_general = portfolios_optimization(
-#     tournment=dict_games,
-#     df=df_work,
-#     stake_model='markowitz',
-#     fractional=1
-# )
+mktz_general = portfolios_optimization(
+    tournment=dict_games,
+    df=df_work,
+    stake_model='markowitz',
+    fractional=1
+)
 
 
 # %% 4 Evaluate models
