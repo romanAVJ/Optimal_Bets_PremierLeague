@@ -18,3 +18,6 @@ Source/statistical_learning_model/variable_selection_lassoCV_nn.py
 
 # ignore all notes #
 Results/notes*
+
+# igore trails #
+Results/statistical_models/random_hypersearch*
