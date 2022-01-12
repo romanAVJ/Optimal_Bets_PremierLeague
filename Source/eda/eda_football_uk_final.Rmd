@@ -115,7 +115,7 @@ df_r %>%
     psca = psca * (final_tt + 1)
   ) %>% 
   select(
-    season, hometeam, awayteam, psch, psca
+    season, hometeam, awayteam, psch, pscd, psca 
   ) %>% 
   pivot_longer(
     cols = psch:psca,
@@ -127,11 +127,11 @@ df_r %>%
   ) %>% 
   ggplot(aes(season, odd, color = type_odd)) +
   geom_boxplot(position = "dodge") +
-  scale_y_continuous( breaks = 2^(0:5)) +
+  scale_y_log10() +
   ggtitle("Distribución de momios por temporadas") +
   xlab("Temporada") + ylab("Momio") +
-  guides(color = guide_legend(title = "Tipo de Momio")) +
-  scale_color_discrete(labels = c("Visitante", "Casa")) +
+  # guides(color = guide_legend(title = "Tipo de Momio")) +
+  # scale_color_discrete(labels = c("Visitante", "Casa")) +
   theme_bw()
 
 

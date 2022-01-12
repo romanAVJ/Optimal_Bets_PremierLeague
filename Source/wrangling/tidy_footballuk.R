@@ -4,7 +4,8 @@
 # 06/07/2021
 # Roman Alberto Velez Jimenez
 #####################################################
-
+library(tidyverse)
+library(tidyr)
 
 # functions ---------------------------------------------------------------
 read_file_x <- function(file_name, dir_name="Data/"){
